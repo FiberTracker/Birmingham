@@ -57,17 +57,8 @@ STATE_FIPS = '01'
 # Technology code for FTTP (Fiber to the Premises)
 TECH_FTTP = 50
 
-# Birmingham metro area county FIPS codes (scope output to metro area)
-# Set to None to include all Alabama counties
-METRO_COUNTIES = {
-    '01073',  # Jefferson
-    '01117',  # Shelby
-    '01115',  # St. Clair
-    '01009',  # Blount
-    '01021',  # Chilton
-    '01007',  # Bibb
-    '01127',  # Walker
-}
+# County filter — set to None for all Alabama counties
+METRO_COUNTIES = None
 
 # Census TIGERweb REST API for block group polygons (Layer 10 = Census Block Groups)
 TIGER_URL = 'https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/tigerWMS_ACS2023/MapServer/10/query'
