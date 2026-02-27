@@ -1,0 +1,861 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Birmingham Alabama FTTH GIS Competitive Map | Halo Fiber</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
+        #auth-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%);
+            z-index: 99999; display: flex; align-items: center; justify-content: center;
+        }
+        #auth-overlay.hidden { display: none; }
+        .auth-box {
+            background: #1E293B; border: 1px solid #334155; border-radius: 12px;
+            padding: 40px; width: 380px; text-align: center; box-shadow: 0 25px 50px rgba(0,0,0,0.5);
+        }
+        .auth-box h2 { color: #F1F5F9; font-size: 20px; font-weight: 600; margin-bottom: 6px; }
+        .auth-box p { color: #94A3B8; font-size: 13px; margin-bottom: 24px; }
+        .auth-box input {
+            width: 100%; padding: 10px 14px; background: #0F172A; border: 1px solid #475569;
+            border-radius: 8px; color: #F1F5F9; font-size: 14px; outline: none; transition: border-color 0.2s;
+        }
+        .auth-box input:focus { border-color: #7C3AED; }
+        .auth-box input::placeholder { color: #64748B; }
+        .auth-box button {
+            width: 100%; margin-top: 12px; padding: 10px; background: #7C3AED;
+            color: white; border: none; border-radius: 8px; font-size: 14px;
+            font-weight: 600; cursor: pointer; transition: background 0.2s;
+        }
+        .auth-box button:hover { background: #6D28D9; }
+        .auth-error { color: #F87171; font-size: 12px; margin-top: 8px; display: none; }
+        #map { height: 600px; width: 100%; border-radius: 12px; }
+        .leaflet-popup-content-wrapper { border-radius: 8px; }
+        .leaflet-popup-content { margin: 12px 16px; min-width: 280px; max-width: 380px; }
+        .stat-card { border-left: 3px solid; }
+        .tab-btn { transition: all 0.2s; cursor: pointer; border-bottom: 3px solid transparent; }
+        .tab-btn.active { border-bottom-color: #7C3AED; color: #7C3AED; font-weight: 600; }
+        .tab-btn:hover:not(.active) { color: #334155; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .pulse { animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .scrollbar-thin::-webkit-scrollbar { width: 4px; }
+        .scrollbar-thin::-webkit-scrollbar-thumb { background-color: #CBD5E1; border-radius: 2px; }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 9999; display: flex; align-items: center; justify-content: center; }
+        .modal-content { background: white; border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,0.2); max-width: 500px; width: 90%; max-height: 80vh; overflow-y: auto; }
+        .collapsible-header { cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+        .collapsible-header::after { content: '\25BC'; font-size: 12px; transition: transform 0.3s; }
+        .collapsible-header.collapsed::after { transform: rotate(-90deg); }
+        .collapsible-content { transition: max-height 0.3s ease-out; overflow: hidden; }
+        .collapsible-content.collapsed { max-height: 0 !important; padding: 0 !important; }
+        @media (max-width: 768px) {
+            body { padding: 8px; }
+            #map { height: 50vh; min-height: 300px; border-radius: 8px; }
+            .leaflet-popup-content { min-width: 240px; margin: 8px 12px; font-size: 13px; }
+            .mobile-hidden { display: none !important; }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen p-2 md:p-4">
+
+    <!-- Password Protection Overlay -->
+    <div id="auth-overlay">
+        <div class="auth-box">
+            <div style="margin-bottom: 16px;">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" stroke-width="1.5" style="margin: 0 auto;">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                </svg>
+            </div>
+            <h2>Birmingham FTTH GIS Tool</h2>
+            <p>Restricted access &mdash; enter password to continue</p>
+            <form onsubmit="return checkAuth()">
+                <input type="password" id="auth-input" placeholder="Password" autocomplete="off" autofocus />
+                <button type="submit">Unlock</button>
+            </form>
+            <div id="auth-error" class="auth-error">Incorrect password. Try again.</div>
+        </div>
+    </div>
+    <script>
+        function checkAuth() {
+            var input = document.getElementById('auth-input').value;
+            if (simpleHash(input) === 'c399b3673c664c99') {
+                document.getElementById('auth-overlay').classList.add('hidden');
+                sessionStorage.setItem('bhm_auth', '1');
+                return false;
+            }
+            document.getElementById('auth-error').style.display = 'block';
+            document.getElementById('auth-input').value = '';
+            document.getElementById('auth-input').focus();
+            return false;
+        }
+        function simpleHash(s) {
+            var h = 0x5f2a1e3d;
+            for (var i = 0; i < s.length; i++) {
+                h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+            }
+            return (h >>> 0).toString(16).padStart(8, '0') + h.toString(16).slice(-8);
+        }
+        if (sessionStorage.getItem('bhm_auth') === '1') {
+            document.getElementById('auth-overlay').classList.add('hidden');
+        }
+    </script>
+
+    <!-- Data & Logic -->
+    <script src="data.js"></script>
+    <script src="calculations.js"></script>
+    <!-- BDC data loaded async -->
+    <script>
+    function loadBDCScripts() {
+        const files = ['bdc_output/att_bdc.js', 'bdc_output/lumos_bdc.js', 'bdc_output/cspire_bdc.js', 'bdc_output/spectrum_bdc.js'];
+        let loaded = 0;
+        let total = files.length;
+        files.forEach(f => {
+            const s = document.createElement('script');
+            s.src = f + '?v=1';
+            s.async = true;
+            s.onload = () => {
+                loaded++;
+                updateBDCLoadStatus(loaded, total);
+                if (loaded === total && typeof renderAllBDC === 'function') {
+                    renderAllBDC();
+                }
+            };
+            s.onerror = () => {
+                loaded++;
+                updateBDCLoadStatus(loaded, total);
+                if (loaded === total && typeof renderAllBDC === 'function') {
+                    renderAllBDC();
+                }
+            };
+            document.head.appendChild(s);
+        });
+    }
+    function updateBDCLoadStatus(loaded, total) {
+        const el = document.getElementById('bdcStats');
+        if (el) el.textContent = loaded < total ? `Loading BDC data... (${loaded}/${total})` : `BDC data loaded (${loaded} providers)`;
+    }
+    </script>
+
+    <div class="max-w-[1440px] mx-auto">
+        <!-- Header -->
+        <div class="bg-gradient-to-r from-slate-800 via-slate-700 to-violet-900 rounded-xl p-3 md:p-5 mb-3 text-white">
+            <div class="flex flex-col md:flex-row md:justify-between md:items-center gap-2">
+                <div>
+                    <p class="text-violet-400 text-[10px] md:text-xs font-semibold tracking-widest mb-1">GIS INTELLIGENCE TOOL</p>
+                    <h1 class="text-lg md:text-2xl font-extrabold">Birmingham Alabama Fiber Competitive Map</h1>
+                    <p class="text-slate-300 text-xs md:text-sm mt-1">9 operators, 1 state | Census-block shading with source links</p>
+                </div>
+                <div class="text-left md:text-right text-xs">
+                    <p class="text-slate-400">Sources: FCC BDC, Press, Company Filings</p>
+                    <p class="text-white font-semibold">February 2026</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab Navigation -->
+        <div class="bg-white rounded-t-xl border-b flex gap-1 px-2 overflow-x-auto">
+            <button class="tab-btn active py-3 px-4 text-sm whitespace-nowrap" onclick="switchTab('map')">GIS Map</button>
+            <button class="tab-btn py-3 px-4 text-sm text-slate-500 whitespace-nowrap" onclick="switchTab('profiles')">Operator Profiles</button>
+            <button class="tab-btn py-3 px-4 text-sm text-slate-500 whitespace-nowrap" onclick="switchTab('builds')">Build Pipeline</button>
+            <button class="tab-btn py-3 px-4 text-sm text-slate-500 whitespace-nowrap" onclick="switchTab('overlap')">Overlap Analysis</button>
+        </div>
+
+        <!-- ========== TAB 1: GIS MAP ========== -->
+        <div id="tab-map" class="tab-content active">
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-3 mt-3">
+                <!-- Map Panel -->
+                <div class="lg:col-span-9">
+                    <div class="bg-white rounded-xl shadow-sm p-3 md:p-4">
+                        <!-- FCC BDC Coverage Toggles -->
+                        <div class="mb-2 pb-2 border-b border-slate-100">
+                            <div class="flex items-center gap-1.5 mb-1.5 flex-wrap">
+                                <span class="text-[10px] text-slate-500 font-semibold uppercase tracking-wider mr-1">FCC BDC:</span>
+                                <button id="bdcToggle_att" onclick="toggleBDCProvider('att')" class="px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all" style="background:#009FDB;color:white;">AT&T</button>
+                                <button id="bdcToggle_lumos" onclick="toggleBDCProvider('lumos')" class="px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all" style="background:#FF6B00;color:white;">Lumos</button>
+                                <button id="bdcToggle_cspire" onclick="toggleBDCProvider('cspire')" class="px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all" style="background:#00205B;color:white;">C Spire</button>
+                                <button id="bdcToggle_spectrum" onclick="toggleBDCProvider('spectrum')" class="px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all" style="background:#0072CE;color:white;">Spectrum</button>
+                                <span class="text-slate-300 mx-0.5">|</span>
+                                <button id="bdcToggle_overlap" onclick="toggleOverlapLayer()" class="px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all" style="background:#E2E8F0;color:#475569;">Fiber Overlap</button>
+                                <select id="bdcCountyFilter" onchange="filterBDCByCounty()" class="text-xs rounded-lg border border-slate-200 px-2 py-1.5 bg-white">
+                                    <option value="all">All Counties</option>
+                                    <option value="01073">Jefferson</option>
+                                    <option value="01117">Shelby</option>
+                                    <option value="01047">Dallas</option>
+                                    <option value="01105">Perry</option>
+                                    <option value="01131">Wilcox</option>
+                                </select>
+                            </div>
+                            <div id="bdcStats" class="text-[10px] text-slate-400">BDC data not loaded. Drop CSVs in fcc_data/ and run process_bdc.py</div>
+                        </div>
+                        <!-- Provider Filters -->
+                        <div class="flex flex-wrap gap-1.5 mb-2 overflow-x-auto pb-1" id="filterBar"></div>
+                        <!-- Census Tract Buttons -->
+                        <div class="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-hide mb-2" id="tractButtons"></div>
+                        <!-- Map -->
+                        <div class="relative">
+                            <div id="map"></div>
+                        </div>
+                        <!-- Legend -->
+                        <div class="mt-3 flex flex-wrap gap-3 text-xs text-slate-600" id="legendBar"></div>
+                    </div>
+
+                    <!-- Summary Stats -->
+                    <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 mt-3">
+                        <div class="bg-white rounded-xl shadow-sm p-3 stat-card" style="border-left-color:#009FDB">
+                            <p class="text-[10px] md:text-xs text-slate-500 mb-1">AT&T Coverage</p>
+                            <p class="text-xl md:text-2xl font-bold text-slate-800" id="attCoverage">91.2%</p>
+                            <p class="text-[10px] text-slate-400">Birmingham metro</p>
+                        </div>
+                        <div class="bg-white rounded-xl shadow-sm p-3 stat-card" style="border-left-color:#FF6B00">
+                            <p class="text-[10px] md:text-xs text-slate-500 mb-1">New Fiber Builds</p>
+                            <p class="text-xl md:text-2xl font-bold text-slate-800" id="newBuilds">100K+</p>
+                            <p class="text-[10px] text-slate-400">Lumos + C Spire announced</p>
+                        </div>
+                        <div class="bg-white rounded-xl shadow-sm p-3 stat-card" style="border-left-color:#DC2626">
+                            <p class="text-[10px] md:text-xs text-slate-500 mb-1">Overlap Zones</p>
+                            <p class="text-xl md:text-2xl font-bold text-slate-800" id="overlapCount">0</p>
+                            <p class="text-[10px] text-slate-400">Multi-provider tracts</p>
+                        </div>
+                        <div class="bg-white rounded-xl shadow-sm p-3 stat-card" style="border-left-color:#7C3AED">
+                            <p class="text-[10px] md:text-xs text-slate-500 mb-1">Est. Build Cost</p>
+                            <p class="text-xl md:text-2xl font-bold text-slate-800" id="totalBuildCost">$0</p>
+                            <p class="text-[10px] text-slate-400">HU x $/passing</p>
+                        </div>
+                    </div>
+
+                    <!-- Build Announcements Table -->
+                    <div class="bg-white rounded-xl shadow-sm p-3 mt-3">
+                        <div class="collapsible-header mb-2" onclick="toggleCollapsible(this)">
+                            <h3 class="font-semibold text-slate-800 text-sm">Announced Builds (with Sources)</h3>
+                        </div>
+                        <div class="collapsible-content">
+                            <div class="overflow-x-auto -mx-3 px-3">
+                                <table class="w-full text-xs min-w-[700px]">
+                                    <thead>
+                                        <tr class="border-b text-left text-slate-500">
+                                            <th class="py-2 px-3">Provider</th><th class="py-2 px-3">Market</th><th class="py-2 px-3">State</th>
+                                            <th class="py-2 px-3">Status</th><th class="py-2 px-3">Target</th><th class="py-2 px-3">Timeline</th>
+                                            <th class="py-2 px-3">Overlap</th><th class="py-2 px-3">Notes</th><th class="py-2 px-3">Source</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="buildTableBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Sidebar -->
+                <div class="lg:col-span-3 space-y-3">
+                    <!-- Quick Navigation -->
+                    <div class="bg-white rounded-xl shadow-sm p-3">
+                        <h3 class="font-semibold text-slate-800 text-sm mb-2">Quick Navigation</h3>
+                        <div id="quickNav" class="space-y-1"></div>
+                    </div>
+
+                    <!-- Census Tract Details -->
+                    <div class="bg-white rounded-xl shadow-sm p-3">
+                        <h3 class="font-semibold text-slate-800 text-sm mb-2">Census Tract Details</h3>
+                        <div id="tractDetails" class="text-xs text-slate-500 max-h-80 overflow-y-auto scrollbar-thin">
+                            Click a tract on the map or use navigation buttons.
+                        </div>
+                    </div>
+
+                    <!-- Key Overlap Zones -->
+                    <div class="bg-red-50 rounded-xl shadow-sm p-3 border border-red-200">
+                        <h3 class="font-semibold text-red-700 text-sm mb-2">Key Overlap Zones</h3>
+                        <div class="space-y-2">
+                            <div class="text-xs">
+                                <p class="font-semibold text-red-600">Hoover, AL (Triple)</p>
+                                <p class="text-red-500">AT&T + Lumos + C Spire + Spectrum cable</p>
+                                <p class="text-red-400 text-[10px]">~25K housing units at risk</p>
+                            </div>
+                            <div class="text-xs">
+                                <p class="font-semibold text-red-600">Homewood, AL (Triple)</p>
+                                <p class="text-red-500">AT&T + Lumos + C Spire</p>
+                                <p class="text-red-400 text-[10px]">~11.5K housing units at risk</p>
+                            </div>
+                            <div class="text-xs">
+                                <p class="font-semibold text-amber-600">Vestavia Hills / Mtn Brook (Dual)</p>
+                                <p class="text-amber-500">AT&T + Lumos</p>
+                                <p class="text-amber-400 text-[10px]">~22.5K housing units</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Data Methodology -->
+                    <div class="bg-white rounded-xl shadow-sm p-3">
+                        <h3 class="font-semibold text-slate-800 text-sm mb-2">Methodology</h3>
+                        <div class="space-y-1 text-[10px] text-slate-500">
+                            <p>Layer 1: Curated heatmap from press releases, company filings, and news articles. Every metric sourced.</p>
+                            <p>Layer 2: FCC BDC census block group shading from actual filing data (tech=50, FTTP only).</p>
+                            <p>Cost/passing: Urban $750, Suburban $825-850, Rural $1,100+</p>
+                            <p class="text-slate-400 mt-2">Click any <button onclick="showCalcModal('beadAlabama')" class="inline-flex items-center justify-center w-3 h-3 rounded-full bg-blue-100 text-blue-600 text-[8px] font-bold hover:bg-blue-200 cursor-pointer">i</button> icon for full calculation methodology.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== TAB 2: OPERATOR PROFILES ========== -->
+        <div id="tab-profiles" class="tab-content">
+            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 mt-3" id="profileCards"></div>
+        </div>
+
+        <!-- ========== TAB 3: BUILD PIPELINE ========== -->
+        <div id="tab-builds" class="tab-content">
+            <div class="bg-white rounded-xl shadow-sm p-4 mt-3">
+                <h2 class="font-bold text-slate-800 text-lg mb-3">Active & Planned Fiber Builds</h2>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs min-w-[900px]">
+                        <thead>
+                            <tr class="border-b text-left text-slate-500">
+                                <th class="py-2 px-3">Provider</th><th class="py-2 px-3">Market</th><th class="py-2 px-3">State</th>
+                                <th class="py-2 px-3">Status</th><th class="py-2 px-3">Target HHP</th><th class="py-2 px-3">Timeline</th>
+                                <th class="py-2 px-3">Overlap</th><th class="py-2 px-3">Notes</th><th class="py-2 px-3">Source</th>
+                            </tr>
+                        </thead>
+                        <tbody id="fullBuildTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== TAB 4: OVERLAP ANALYSIS ========== -->
+        <div id="tab-overlap" class="tab-content">
+            <div class="bg-white rounded-xl shadow-sm p-4 mt-3">
+                <h2 class="font-bold text-slate-800 text-lg mb-3">Competitive Overlap Matrix</h2>
+                <p class="text-xs text-slate-500 mb-3">Market-by-operator view. Colored dots indicate presence level.</p>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs min-w-[800px]">
+                        <thead>
+                            <tr class="border-b text-left text-slate-500">
+                                <th class="py-2 px-3">Market</th>
+                                <th class="py-2 px-2 text-center">ATT</th>
+                                <th class="py-2 px-2 text-center">LUM</th>
+                                <th class="py-2 px-2 text-center">CSP</th>
+                                <th class="py-2 px-2 text-center">SPE</th>
+                                <th class="py-2 px-2 text-center">HLO</th>
+                                <th class="py-2 px-2 text-center">CMC</th>
+                                <th class="py-2 px-2 text-center">GNS</th>
+                                <th class="py-2 px-3">Risk</th>
+                                <th class="py-2 px-3">Notes</th>
+                            </tr>
+                        </thead>
+                        <tbody id="overlapTableBody"></tbody>
+                    </table>
+                </div>
+                <div class="mt-4 flex flex-wrap gap-3 text-[10px] text-slate-500">
+                    <span><span class="inline-block w-3 h-3 rounded-full bg-green-500 mr-1"></span>Core</span>
+                    <span><span class="inline-block w-3 h-3 rounded-full bg-blue-400 mr-1"></span>Active</span>
+                    <span><span class="inline-block w-3 h-3 rounded-full bg-amber-500 mr-1"></span>Building</span>
+                    <span><span class="inline-block w-3 h-3 rounded-full bg-violet-400 mr-1"></span>Planned</span>
+                    <span><span class="inline-block w-3 h-3 rounded-full bg-slate-300 mr-1"></span>Limited</span>
+                </div>
+            </div>
+
+            <!-- BEAD Summary -->
+            <div class="bg-white rounded-xl shadow-sm p-4 mt-3">
+                <h2 class="font-bold text-slate-800 text-lg mb-3">Alabama BEAD Awards Summary</h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div class="bg-sky-50 rounded-lg p-3">
+                        <p class="text-xs text-sky-700 font-semibold">AT&T / BellSouth</p>
+                        <p class="text-xl font-bold text-sky-800">$93.2M</p>
+                        <p class="text-[10px] text-sky-600">Technology: Fiber</p>
+                    </div>
+                    <div class="bg-red-50 rounded-lg p-3">
+                        <p class="text-xs text-red-700 font-semibold">Comcast Cable</p>
+                        <p class="text-xl font-bold text-red-800">$157.2M</p>
+                        <p class="text-[10px] text-red-600">Technology: Fiber + HFC</p>
+                    </div>
+                    <div class="bg-blue-50 rounded-lg p-3">
+                        <p class="text-xs text-blue-700 font-semibold">Charter / Spectrum</p>
+                        <p class="text-xl font-bold text-blue-800">$16.6M</p>
+                        <p class="text-[10px] text-blue-600">Technology: Fiber</p>
+                    </div>
+                </div>
+                <p class="text-[10px] text-slate-400 mt-2">Source: <a href="https://brandergroup.net/2025/11/bead-broadband-status-awards-by-state-october-2025/" target="_blank" class="text-blue-500 underline">Brander Group BEAD Tracker (Oct 2025)</a> | Total AL BEAD allocation: $1.4B | Total provisional awards: $530.7M</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Calculation Modal -->
+    <div id="calcModal" class="modal-overlay hidden" onclick="if(event.target===this)closeCalcModal()">
+        <div class="modal-content">
+            <div class="flex justify-between items-center p-3 border-b">
+                <span class="text-xs font-semibold text-slate-500">METHODOLOGY</span>
+                <button onclick="closeCalcModal()" class="text-slate-400 hover:text-slate-600 text-lg">&times;</button>
+            </div>
+            <div id="calcModalBody"></div>
+        </div>
+    </div>
+
+    <script>
+    // ============================================
+    // TAB SWITCHING
+    // ============================================
+    const tabMap = { map: 0, profiles: 1, builds: 2, overlap: 3 };
+    function switchTab(tabName) {
+        const tabs = document.querySelectorAll('.tab-content');
+        const btns = document.querySelectorAll('.tab-btn');
+        const idx = tabMap[tabName];
+        tabs.forEach((t, i) => t.classList.toggle('active', i === idx));
+        btns.forEach((b, i) => {
+            b.classList.toggle('active', i === idx);
+            if (i !== idx) b.classList.add('text-slate-500');
+            else b.classList.remove('text-slate-500');
+        });
+        if (tabName === 'map') setTimeout(() => map.invalidateSize(), 100);
+    }
+
+    // ============================================
+    // COLLAPSIBLE PANELS
+    // ============================================
+    function toggleCollapsible(header) {
+        header.classList.toggle('collapsed');
+        const content = header.nextElementSibling;
+        content.classList.toggle('collapsed');
+    }
+
+    // ============================================
+    // MAP INITIALIZATION
+    // ============================================
+    const map = L.map('map', { preferCanvas: true }).setView([33.520, -86.802], 10);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; OpenStreetMap &copy; CARTO', maxZoom: 19
+    }).addTo(map);
+    L.control.scale({ imperial: true, metric: true }).addTo(map);
+
+    // Layer groups
+    const providerLayers = {};
+    Object.keys(PROVIDERS).forEach(k => { providerLayers[k] = L.layerGroup().addTo(map); });
+    const censusLayer = L.layerGroup().addTo(map);
+    const bdcLayers = { att: L.layerGroup(), lumos: L.layerGroup(), cspire: L.layerGroup(), spectrum: L.layerGroup(), overlap: L.layerGroup() };
+    const bdcActive = { att: true, lumos: true, cspire: true, spectrum: true, overlap: false };
+
+    // Provider filter state
+    const providerVisible = {};
+    Object.keys(PROVIDERS).forEach(k => { providerVisible[k] = true; });
+
+    // ============================================
+    // RENDER MARKET MARKERS
+    // ============================================
+    MARKETS.forEach(m => {
+        const prov = PROVIDERS[m.provider];
+        if (!prov) return;
+        const marker = L.circleMarker([m.lat, m.lng], {
+            radius: m.size || 8,
+            fillColor: prov.color,
+            color: '#fff',
+            weight: 1.5,
+            opacity: 1,
+            fillOpacity: m.isNew ? 0.9 : 0.7,
+        });
+        marker.bindPopup(mapPopupHTML(m), { maxWidth: 380 });
+        if (m.isNew) marker.getElement && marker.on('add', function() {
+            const el = this.getElement();
+            if (el) el.classList.add('pulse');
+        });
+        providerLayers[m.provider].addLayer(marker);
+    });
+
+    // ============================================
+    // PROVIDER FILTER BAR
+    // ============================================
+    function renderFilterBar() {
+        const bar = document.getElementById('filterBar');
+        bar.innerHTML = '';
+        Object.entries(PROVIDERS).forEach(([key, p]) => {
+            const active = providerVisible[key];
+            const btn = document.createElement('button');
+            btn.className = `px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all`;
+            btn.style.background = active ? p.color : '#E2E8F0';
+            btn.style.color = active ? 'white' : '#94A3B8';
+            btn.innerHTML = `<span class="inline-block w-2 h-2 rounded-full mr-1" style="background:${active ? 'white' : p.color}"></span>${p.short}`;
+            btn.onclick = () => toggleProvider(key);
+            bar.appendChild(btn);
+        });
+    }
+
+    function toggleProvider(key) {
+        providerVisible[key] = !providerVisible[key];
+        if (providerVisible[key]) {
+            map.addLayer(providerLayers[key]);
+        } else {
+            map.removeLayer(providerLayers[key]);
+        }
+        renderFilterBar();
+    }
+
+    // ============================================
+    // CENSUS TRACT NAVIGATION
+    // ============================================
+    const tractLocations = {
+        birmingham_core:        { label: 'Birmingham Core', bg: '#D1ECFF', text: '#005A8C', coords: [33.520, -86.802], zoom: 12 },
+        hoover_vestavia:        { label: 'Hoover/Vestavia', bg: '#FFE0CC', text: '#993F00', coords: [33.390, -86.810], zoom: 12 },
+        mountain_brook_homewood:{ label: 'Mtn Brook/Homewood', bg: '#EDE9FE', text: '#6D28D9', coords: [33.460, -86.770], zoom: 13 },
+        south_suburbs:          { label: 'South Suburbs', bg: '#CCE0FF', text: '#001233', coords: [33.300, -86.750], zoom: 11 },
+        north_jefferson:        { label: 'North Jefferson', bg: '#CCFBF1', text: '#0F766E', coords: [33.650, -86.580], zoom: 11 },
+        west_jefferson:         { label: 'West Jefferson', bg: '#FEE2E2', text: '#991B1B', coords: [33.430, -86.950], zoom: 11 },
+        black_belt:             { label: 'Black Belt', bg: '#F3E8FF', text: '#7C3AED', coords: [32.350, -87.200], zoom: 9 },
+    };
+
+    function renderTractButtons() {
+        const container = document.getElementById('tractButtons');
+        container.innerHTML = '';
+        Object.entries(tractLocations).forEach(([key, t]) => {
+            const btn = document.createElement('button');
+            btn.className = 'px-3 py-1.5 rounded-lg text-[11px] font-semibold whitespace-nowrap transition-all hover:opacity-80';
+            btn.style.background = t.bg;
+            btn.style.color = t.text;
+            btn.textContent = t.label;
+            btn.onclick = () => loadCensusTracts(key);
+            container.appendChild(btn);
+        });
+        // Load All / Clear buttons
+        const loadAll = document.createElement('button');
+        loadAll.className = 'px-3 py-1.5 rounded-lg text-[11px] font-semibold whitespace-nowrap bg-slate-700 text-white hover:bg-slate-600';
+        loadAll.textContent = 'Load All';
+        loadAll.onclick = () => { Object.keys(tractLocations).forEach(k => loadCensusTracts(k)); };
+        container.appendChild(loadAll);
+
+        const clear = document.createElement('button');
+        clear.className = 'px-3 py-1.5 rounded-lg text-[11px] font-semibold whitespace-nowrap bg-slate-200 text-slate-600 hover:bg-slate-300';
+        clear.textContent = 'Clear';
+        clear.onclick = () => {
+            censusLayer.clearLayers();
+            document.getElementById('tractDetails').innerHTML = 'Click a tract on the map or use navigation buttons.';
+            updateStats();
+        };
+        container.appendChild(clear);
+    }
+
+    function loadCensusTracts(areaKey) {
+        const area = CENSUS_TRACTS[areaKey];
+        if (!area) return;
+        const loc = tractLocations[areaKey];
+
+        // Clear existing tracts for this area
+        censusLayer.eachLayer(l => {
+            if (l.options && l.options.areaKey === areaKey) censusLayer.removeLayer(l);
+        });
+
+        area.tracts.forEach(tract => {
+            const color = tract.overlap ? '#DC2626' : '#3B82F6';
+            const fillColor = tract.overlap ? '#FEE2E2' : '#DBEAFE';
+            const poly = L.polygon(tract.coords, {
+                color: color,
+                fillColor: fillColor,
+                fillOpacity: 0.25,
+                weight: 2,
+                dashArray: tract.isNew ? '5,5' : null,
+                areaKey: areaKey,
+            });
+
+            let popupHtml = `<div style="font-family:Inter,-apple-system,sans-serif;min-width:280px;">
+                <div style="font-weight:700;font-size:13px;color:#1E293B;margin-bottom:4px;">${tract.name}</div>
+                <div style="font-size:11px;color:#64748B;margin-bottom:8px;">${area.county} County, ${area.state}</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:8px;">
+                    <div style="background:#F8FAFC;padding:6px;border-radius:6px;">
+                        <div style="font-size:9px;color:#94A3B8;">Housing Units</div>
+                        <div style="font-size:13px;font-weight:700;color:#1E293B;">${tract.housingUnits.toLocaleString()}</div>
+                    </div>
+                    <div style="background:#F8FAFC;padding:6px;border-radius:6px;">
+                        <div style="font-size:9px;color:#94A3B8;">Density</div>
+                        <div style="font-size:13px;font-weight:700;color:#1E293B;">${tract.density}</div>
+                    </div>
+                    <div style="background:#F8FAFC;padding:6px;border-radius:6px;">
+                        <div style="font-size:9px;color:#94A3B8;">Est. $/Passing</div>
+                        <div style="font-size:13px;font-weight:700;color:#1E293B;">$${tract.costPerPassing.toLocaleString()}</div>
+                    </div>
+                    <div style="background:${tract.overlap?'#FEF2F2':'#F0FDF4'};padding:6px;border-radius:6px;">
+                        <div style="font-size:9px;color:${tract.overlap?'#DC2626':'#15803D'};">Overlap</div>
+                        <div style="font-size:13px;font-weight:700;color:${tract.overlap?'#DC2626':'#15803D'};">${tract.overlap?'YES':'No'}</div>
+                    </div>
+                </div>
+                <div style="font-size:11px;margin-bottom:4px;"><strong>Provider:</strong> ${tract.provider}</div>
+                <div style="font-size:11px;margin-bottom:4px;"><strong>Status:</strong> ${tract.permitStatus}</div>
+                ${tract.notes ? `<div style="font-size:10px;color:#64748B;font-style:italic;margin-bottom:6px;">${tract.notes}</div>` : ''}
+                <div style="border-top:1px solid #E2E8F0;padding-top:6px;margin-top:4px;">
+                    <a href="${tract.sourceUrl}" target="_blank" style="font-size:10px;color:#2563EB;text-decoration:underline;">${tract.sourceType} &rarr;</a>
+                    <span style="margin:0 4px;color:#CBD5E1;">|</span>
+                    <a href="${tract.fccCheck}" target="_blank" style="font-size:10px;color:#7C3AED;text-decoration:underline;">FCC BDC Verify &rarr;</a>
+                </div>
+            </div>`;
+
+            poly.bindPopup(popupHtml, { maxWidth: 400 });
+            censusLayer.addLayer(poly);
+        });
+
+        if (loc) map.flyTo(loc.coords, loc.zoom, { duration: 0.8 });
+        updateTractDetails(areaKey);
+        updateStats();
+    }
+
+    function updateTractDetails(areaKey) {
+        const area = CENSUS_TRACTS[areaKey];
+        if (!area) return;
+        const el = document.getElementById('tractDetails');
+        let html = `<p class="font-semibold text-slate-700 text-xs mb-2">${area.county} County, ${area.state}</p>`;
+        area.tracts.forEach(t => {
+            html += `<div class="border-b border-slate-100 pb-2 mb-2">
+                <p class="font-medium text-slate-700">${t.name}</p>
+                <p class="text-[10px]">${t.housingUnits.toLocaleString()} HU | ${t.density} | $${t.costPerPassing}/pass</p>
+                <p class="text-[10px] ${t.overlap ? 'text-red-500 font-semibold' : 'text-green-600'}">${t.provider}</p>
+                <a href="${t.fccCheck}" target="_blank" class="text-[10px] text-violet-500 underline">FCC Verify</a>
+            </div>`;
+        });
+        el.innerHTML = html;
+    }
+
+    // ============================================
+    // STATS UPDATE
+    // ============================================
+    function updateStats() {
+        let overlapCount = 0;
+        let totalCost = 0;
+        let totalHU = 0;
+
+        Object.values(CENSUS_TRACTS).forEach(area => {
+            area.tracts.forEach(t => {
+                if (t.overlap) overlapCount++;
+                totalCost += t.housingUnits * t.costPerPassing;
+                totalHU += t.housingUnits;
+            });
+        });
+
+        document.getElementById('overlapCount').textContent = overlapCount;
+        document.getElementById('totalBuildCost').textContent = '$' + (totalCost / 1e9).toFixed(2) + 'B';
+    }
+
+    // ============================================
+    // LEGEND
+    // ============================================
+    function renderLegend() {
+        const legend = document.getElementById('legendBar');
+        const items = [
+            { color: '#DCFCE7', border: '#15803D', label: 'Core / Active' },
+            { color: '#FEF3C7', border: '#92400E', label: 'Construction' },
+            { color: '#F3E8FF', border: '#6B21A8', label: 'Planned' },
+            { color: '#FEE2E2', border: '#DC2626', label: 'Overlap Zone' },
+            { color: '#DBEAFE', border: '#3B82F6', label: 'Census Tract' },
+        ];
+        legend.innerHTML = items.map(i =>
+            `<span class="inline-flex items-center gap-1"><span class="w-3 h-3 rounded" style="background:${i.color};border:1.5px solid ${i.border};"></span>${i.label}</span>`
+        ).join('');
+    }
+
+    // ============================================
+    // QUICK NAVIGATION
+    // ============================================
+    function renderQuickNav() {
+        const nav = document.getElementById('quickNav');
+        nav.innerHTML = '';
+        Object.entries(tractLocations).forEach(([key, t]) => {
+            const btn = document.createElement('button');
+            btn.className = 'block w-full text-left px-2 py-1.5 rounded text-xs hover:bg-slate-50 transition-colors';
+            btn.innerHTML = `<span class="inline-block w-2 h-2 rounded-full mr-1.5" style="background:${t.text}"></span>${t.label}`;
+            btn.onclick = () => loadCensusTracts(key);
+            nav.appendChild(btn);
+        });
+    }
+
+    // ============================================
+    // OPERATOR PROFILES TAB
+    // ============================================
+    function renderProfiles() {
+        const container = document.getElementById('profileCards');
+        container.innerHTML = '';
+        OPERATOR_PROFILES.forEach(op => {
+            const prov = PROVIDERS[op.id];
+            const color = prov ? prov.color : '#6B7280';
+            let html = `<div class="bg-white rounded-xl shadow-sm p-4 border-t-4" style="border-top-color:${color}">
+                <div class="flex justify-between items-start mb-3">
+                    <div>
+                        <h3 class="font-bold text-slate-800">${op.name}</h3>
+                        <p class="text-xs text-slate-500">${op.sponsor}</p>
+                    </div>
+                    <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold" style="background:${color}20;color:${color};">${op.states.join(', ')}</span>
+                </div>
+                <div class="text-xs text-slate-500 mb-2">
+                    <span class="font-medium">HQ:</span> ${op.hq} | <span class="font-medium">CEO:</span> ${op.ceo}
+                </div>
+                <div class="border-t border-slate-100 pt-2 space-y-0.5">`;
+
+            op.metrics.forEach(m => {
+                html += metricWithSource(m.label, m.value, m.source, m.sourceUrl, m.note);
+            });
+
+            html += `</div></div>`;
+            container.innerHTML += html;
+        });
+    }
+
+    // ============================================
+    // BUILD PIPELINE TABLE
+    // ============================================
+    function renderBuildTables() {
+        const tbody1 = document.getElementById('buildTableBody');
+        const tbody2 = document.getElementById('fullBuildTableBody');
+        const rows = BUILD_PIPELINE.map(b => buildRowHTML(b)).join('');
+        tbody1.innerHTML = rows;
+        tbody2.innerHTML = rows;
+    }
+
+    // ============================================
+    // OVERLAP MATRIX
+    // ============================================
+    function renderOverlapMatrix() {
+        const tbody = document.getElementById('overlapTableBody');
+        tbody.innerHTML = OVERLAP_MATRIX.map(row => `
+            <tr class="border-b border-slate-100 hover:bg-slate-50/50">
+                <td class="py-2 px-3 text-xs font-medium">${row.market}<br><span class="text-[10px] text-slate-400">${row.state}</span></td>
+                <td class="py-2 px-2 text-center">${overlapCell(row.att)}</td>
+                <td class="py-2 px-2 text-center">${overlapCell(row.lumos)}</td>
+                <td class="py-2 px-2 text-center">${overlapCell(row.cspire)}</td>
+                <td class="py-2 px-2 text-center">${overlapCell(row.spectrum)}</td>
+                <td class="py-2 px-2 text-center">${overlapCell(row.halo)}</td>
+                <td class="py-2 px-2 text-center">${overlapCell(row.comcast)}</td>
+                <td class="py-2 px-2 text-center">${overlapCell(row.gonetspeed)}</td>
+                <td class="py-2 px-3">${riskBadge(row.risk)}</td>
+                <td class="py-2 px-3 text-[10px] text-slate-500 max-w-[200px]">${row.sourceNote || ''}</td>
+            </tr>
+        `).join('');
+    }
+
+    // ============================================
+    // BDC TOGGLE FUNCTIONS
+    // ============================================
+    const bdcProviderConfig = {
+        att: { data: null, name: 'AT&T Fiber', color: '#009FDB', colorLight: '#D1ECFF', colorDark: '#005A8C' },
+        lumos: { data: null, name: 'Lumos', color: '#FF6B00', colorLight: '#FFE0CC', colorDark: '#993F00' },
+        cspire: { data: null, name: 'C Spire', color: '#00205B', colorLight: '#CCE0FF', colorDark: '#001233' },
+        spectrum: { data: null, name: 'Spectrum', color: '#0072CE', colorLight: '#CCE5FF', colorDark: '#004080' },
+    };
+
+    function toggleBDCProvider(key) {
+        bdcActive[key] = !bdcActive[key];
+        const btn = document.getElementById('bdcToggle_' + key);
+        if (bdcActive[key]) {
+            map.addLayer(bdcLayers[key]);
+            if (btn) { btn.style.background = bdcProviderConfig[key] ? bdcProviderConfig[key].color : '#7C3AED'; btn.style.color = 'white'; }
+        } else {
+            map.removeLayer(bdcLayers[key]);
+            if (btn) { btn.style.background = '#E2E8F0'; btn.style.color = '#94A3B8'; }
+        }
+    }
+
+    function toggleOverlapLayer() {
+        bdcActive.overlap = !bdcActive.overlap;
+        const btn = document.getElementById('bdcToggle_overlap');
+        if (bdcActive.overlap) {
+            map.addLayer(bdcLayers.overlap);
+            btn.style.background = '#7C3AED';
+            btn.style.color = 'white';
+        } else {
+            map.removeLayer(bdcLayers.overlap);
+            btn.style.background = '#E2E8F0';
+            btn.style.color = '#475569';
+        }
+    }
+
+    function filterBDCByCounty() {
+        const fips = document.getElementById('bdcCountyFilter').value;
+        // Filter BDC layers by county FIPS prefix
+        Object.keys(bdcLayers).forEach(key => {
+            if (key === 'overlap') return;
+            bdcLayers[key].eachLayer(layer => {
+                if (fips === 'all') {
+                    layer.setStyle({ opacity: 1, fillOpacity: 0.35 });
+                } else {
+                    const geoid = layer.feature && layer.feature.properties ? layer.feature.properties.id : '';
+                    if (geoid.startsWith(fips)) {
+                        layer.setStyle({ opacity: 1, fillOpacity: 0.35 });
+                    } else {
+                        layer.setStyle({ opacity: 0.1, fillOpacity: 0.05 });
+                    }
+                }
+            });
+        });
+    }
+
+    // Render BDC GeoJSON layers when scripts load
+    function renderAllBDC() {
+        const provMap = {
+            att: window.ATT_BDC_COVERAGE,
+            lumos: window.LUMOS_BDC_COVERAGE,
+            cspire: window.CSPIRE_BDC_COVERAGE,
+            spectrum: window.SPECTRUM_BDC_COVERAGE,
+        };
+
+        Object.entries(provMap).forEach(([key, data]) => {
+            if (!data) return;
+            const cfg = bdcProviderConfig[key];
+            const layer = L.geoJSON(data, {
+                style: feature => {
+                    const bsls = feature.properties.bsls || 0;
+                    const opacity = Math.min(0.15 + (bsls / 500) * 0.4, 0.55);
+                    return {
+                        fillColor: cfg.color,
+                        color: cfg.colorDark,
+                        weight: 0.5,
+                        opacity: 0.6,
+                        fillOpacity: opacity,
+                    };
+                },
+                onEachFeature: (feature, layer) => {
+                    const p = feature.properties;
+                    layer.bindPopup(`<div style="font-family:Inter,-apple-system,sans-serif;min-width:240px;">
+                        <div style="font-weight:700;font-size:13px;color:${cfg.color};margin-bottom:6px;">${cfg.name} BDC Coverage</div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:6px;">
+                            <div style="background:#F8FAFC;padding:6px;border-radius:6px;">
+                                <div style="font-size:9px;color:#94A3B8;">BSL Count</div>
+                                <div style="font-size:14px;font-weight:700;">${(p.bsls||0).toLocaleString()}</div>
+                            </div>
+                            <div style="background:#F8FAFC;padding:6px;border-radius:6px;">
+                                <div style="font-size:9px;color:#94A3B8;">Coverage</div>
+                                <div style="font-size:14px;font-weight:700;">${p.coveragePct ? p.coveragePct.toFixed(1)+'%' : 'N/A'}</div>
+                            </div>
+                        </div>
+                        <div style="font-size:11px;"><strong>Block Group:</strong> ${p.id || 'N/A'}</div>
+                        <div style="font-size:11px;"><strong>County:</strong> ${p.county || 'N/A'}, ${p.state || 'AL'}</div>
+                        <div style="border-top:1px solid #E2E8F0;padding-top:4px;margin-top:6px;">
+                            <a href="https://broadbandmap.fcc.gov/location-summary/fixed?speed=25_3&latlon=${layer.getBounds().getCenter().lat},${layer.getBounds().getCenter().lng}&zoom=14" target="_blank" style="font-size:10px;color:#7C3AED;text-decoration:underline;">Verify on FCC BDC &rarr;</a>
+                        </div>
+                        <div style="font-size:9px;color:#94A3B8;margin-top:4px;">Source: FCC BDC Filing | Tech: FTTP (50)</div>
+                    </div>`, { maxWidth: 350 });
+                }
+            });
+            bdcLayers[key].clearLayers();
+            bdcLayers[key].addLayer(layer);
+            if (bdcActive[key]) map.addLayer(bdcLayers[key]);
+        });
+
+        document.getElementById('bdcStats').textContent = 'BDC layers rendered. Toggle providers above.';
+    }
+
+    // ============================================
+    // INITIALIZE
+    // ============================================
+    renderFilterBar();
+    renderTractButtons();
+    renderLegend();
+    renderQuickNav();
+    renderProfiles();
+    renderBuildTables();
+    renderOverlapMatrix();
+    updateStats();
+
+    // Load BDC data async (won't block if files don't exist)
+    setTimeout(loadBDCScripts, 500);
+    </script>
+</body>
+</html>
