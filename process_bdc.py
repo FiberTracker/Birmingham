@@ -47,6 +47,8 @@ PROVIDER_MAP = {
     '130235': {'var': 'SPECTRUM_BDC_COVERAGE', 'file': 'spectrum_bdc.js', 'name': 'Spectrum'},
     # C Spire — 6.3K fiber BSLs in Jefferson Co
     '131302': {'var': 'CSPIRE_BDC_COVERAGE', 'file': 'cspire_bdc.js', 'name': 'C Spire'},
+    # Windstream / Kinetic — 3K fiber BSLs in Jefferson Co
+    '131413': {'var': 'KINETIC_BDC_COVERAGE', 'file': 'kinetic_bdc.js', 'name': 'Kinetic (Windstream)'},
 }
 
 # Alabama FIPS
