@@ -114,7 +114,7 @@
     <!-- BDC data loaded async -->
     <script>
     function loadBDCScripts() {
-        const files = ['bdc_output/att_bdc.js', 'bdc_output/lumos_bdc.js', 'bdc_output/cspire_bdc.js', 'bdc_output/spectrum_bdc.js'];
+        const files = ['bdc_output/att_bdc.js', 'bdc_output/cspire_bdc.js', 'bdc_output/spectrum_bdc.js'];
         let loaded = 0;
         let total = files.length;
         files.forEach(f => {
@@ -179,7 +179,7 @@
                             <div class="flex items-center gap-1.5 mb-1.5 flex-wrap">
                                 <span class="text-[10px] text-slate-500 font-semibold uppercase tracking-wider mr-1">FCC BDC:</span>
                                 <button id="bdcToggle_att" onclick="toggleBDCProvider('att')" class="px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all" style="background:#009FDB;color:white;">AT&T</button>
-                                <button id="bdcToggle_lumos" onclick="toggleBDCProvider('lumos')" class="px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all" style="background:#FF6B00;color:white;">Lumos</button>
+                                <!-- Lumos not in AL FCC filings -->
                                 <button id="bdcToggle_cspire" onclick="toggleBDCProvider('cspire')" class="px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all" style="background:#00205B;color:white;">C Spire</button>
                                 <button id="bdcToggle_spectrum" onclick="toggleBDCProvider('spectrum')" class="px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all" style="background:#0072CE;color:white;">Spectrum</button>
                                 <span class="text-slate-300 mx-0.5">|</span>
@@ -438,8 +438,8 @@
     const providerLayers = {};
     Object.keys(PROVIDERS).forEach(k => { providerLayers[k] = L.layerGroup().addTo(map); });
     const censusLayer = L.layerGroup().addTo(map);
-    const bdcLayers = { att: L.layerGroup(), lumos: L.layerGroup(), cspire: L.layerGroup(), spectrum: L.layerGroup(), overlap: L.layerGroup() };
-    const bdcActive = { att: true, lumos: true, cspire: true, spectrum: true, overlap: false };
+    const bdcLayers = { att: L.layerGroup(), cspire: L.layerGroup(), spectrum: L.layerGroup(), overlap: L.layerGroup() };
+    const bdcActive = { att: true, cspire: true, spectrum: true, overlap: false };
 
     // Provider filter state
     const providerVisible = {};
@@ -736,7 +736,7 @@
     // ============================================
     const bdcProviderConfig = {
         att: { data: null, name: 'AT&T Fiber', color: '#009FDB', colorLight: '#D1ECFF', colorDark: '#005A8C' },
-        lumos: { data: null, name: 'Lumos', color: '#FF6B00', colorLight: '#FFE0CC', colorDark: '#993F00' },
+        // Lumos not in AL FCC BDC filings — Layer 1 curated data only
         cspire: { data: null, name: 'C Spire', color: '#00205B', colorLight: '#CCE0FF', colorDark: '#001233' },
         spectrum: { data: null, name: 'Spectrum', color: '#0072CE', colorLight: '#CCE5FF', colorDark: '#004080' },
     };
@@ -791,7 +791,6 @@
     function renderAllBDC() {
         const provMap = {
             att: window.ATT_BDC_COVERAGE,
-            lumos: window.LUMOS_BDC_COVERAGE,
             cspire: window.CSPIRE_BDC_COVERAGE,
             spectrum: window.SPECTRUM_BDC_COVERAGE,
         };
@@ -821,8 +820,8 @@
                                 <div style="font-size:14px;font-weight:700;">${(p.bsls||0).toLocaleString()}</div>
                             </div>
                             <div style="background:#F8FAFC;padding:6px;border-radius:6px;">
-                                <div style="font-size:9px;color:#94A3B8;">Coverage</div>
-                                <div style="font-size:14px;font-weight:700;">${p.coveragePct ? p.coveragePct.toFixed(1)+'%' : 'N/A'}</div>
+                                <div style="font-size:9px;color:#94A3B8;">Density</div>
+                                <div style="font-size:14px;font-weight:700;">${p.density ? p.density.toFixed(0)+'/km\u00B2' : 'N/A'}</div>
                             </div>
                         </div>
                         <div style="font-size:11px;"><strong>Block Group:</strong> ${p.id || 'N/A'}</div>

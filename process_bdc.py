@@ -41,14 +41,12 @@ except ImportError:
 # Update these after inspecting your downloaded CSV filenames
 # Filename pattern: bdc_01_{providerID}_fixed_broadband_{period}.csv
 PROVIDER_MAP = {
-    # AT&T / BellSouth — verify ID from CSV filename
+    # AT&T / BellSouth — 140K+ fiber BSLs in Jefferson Co
     '130077': {'var': 'ATT_BDC_COVERAGE', 'file': 'att_bdc.js', 'name': 'AT&T Fiber'},
-    # Charter / Spectrum
-    '130455': {'var': 'SPECTRUM_BDC_COVERAGE', 'file': 'spectrum_bdc.js', 'name': 'Spectrum'},
-    # C Spire — update with actual FCC ID from CSV
-    # '??????': {'var': 'CSPIRE_BDC_COVERAGE', 'file': 'cspire_bdc.js', 'name': 'C Spire'},
-    # Lumos — update with actual FCC ID from CSV
-    # '??????': {'var': 'LUMOS_BDC_COVERAGE', 'file': 'lumos_bdc.js', 'name': 'Lumos'},
+    # Charter / Spectrum — 3.3K fiber BSLs in Jefferson Co
+    '130235': {'var': 'SPECTRUM_BDC_COVERAGE', 'file': 'spectrum_bdc.js', 'name': 'Spectrum'},
+    # C Spire — 6.3K fiber BSLs in Jefferson Co
+    '131302': {'var': 'CSPIRE_BDC_COVERAGE', 'file': 'cspire_bdc.js', 'name': 'C Spire'},
 }
 
 # Alabama FIPS
@@ -57,8 +55,20 @@ STATE_FIPS = '01'
 # Technology code for FTTP (Fiber to the Premises)
 TECH_FTTP = 50
 
-# Census TIGERweb REST API for block group polygons
-TIGER_URL = 'https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/tigerWMS_ACS2023/MapServer/8/query'
+# Birmingham metro area county FIPS codes (scope output to metro area)
+# Set to None to include all Alabama counties
+METRO_COUNTIES = {
+    '01073',  # Jefferson
+    '01117',  # Shelby
+    '01115',  # St. Clair
+    '01009',  # Blount
+    '01021',  # Chilton
+    '01007',  # Bibb
+    '01127',  # Walker
+}
+
+# Census TIGERweb REST API for block group polygons (Layer 10 = Census Block Groups)
+TIGER_URL = 'https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/tigerWMS_ACS2023/MapServer/10/query'
 
 # Simplification tolerance (degrees, ~200m at Birmingham latitude)
 SIMPLIFY_TOLERANCE = 0.002
@@ -163,6 +173,10 @@ def read_bdc_csv(csv_path):
             if not bg_geoid.startswith(STATE_FIPS):
                 continue
 
+            # Filter to metro counties if configured
+            if METRO_COUNTIES and bg_geoid[:5] not in METRO_COUNTIES:
+                continue
+
             block_groups[bg_geoid]['bsls'] += 1
             block_groups[bg_geoid]['blocks'].add(geoid[:15])  # Full block GEOID
 
@@ -213,7 +227,7 @@ def fetch_tiger_polygons(geoids):
 
             params = {
                 'where': f"STATE='{state_fips}' AND COUNTY='{county_code}' AND GEOID IN ('{geoid_list}')",
-                'outFields': 'GEOID,AREALAND,POP100,HU100',
+                'outFields': 'GEOID,AREALAND',
                 'f': 'geojson',
                 'outSR': '4326',
             }
@@ -233,8 +247,6 @@ def fetch_tiger_polygons(geoids):
                             geom = simplify_geometry(feature['geometry'])
                             POLYGON_CACHE[geoid] = {
                                 'geometry': geom,
-                                'hu100': feature['properties'].get('HU100', 0),
-                                'pop100': feature['properties'].get('POP100', 0),
                                 'arealand': feature['properties'].get('AREALAND', 0),
                             }
                             total_fetched += 1
@@ -301,9 +313,9 @@ def build_geojson(block_groups, provider_name):
         county_name = COUNTY_NAMES.get(county_fips, f'FIPS {county_fips}')
         state_abbr = 'AL'
 
-        hu100 = cached.get('hu100', 0)
-        coverage_pct = (data['bsls'] / hu100 * 100) if hu100 > 0 else 0
         area_sq_km = cached.get('arealand', 0) / 1e6  # Convert sq meters to sq km
+        # BSL density per sq km (useful for shading intensity)
+        density = (data['bsls'] / area_sq_km) if area_sq_km > 0 else 0
 
         feature = {
             'type': 'Feature',
@@ -314,9 +326,7 @@ def build_geojson(block_groups, provider_name):
                 'state': state_abbr,
                 'county': county_name,
                 'areaLandSqKm': round(area_sq_km, 2),
-                'hu100': hu100,
-                'pop100': cached.get('pop100', 0),
-                'coveragePct': round(coverage_pct, 1),
+                'density': round(density, 1),
             },
             'geometry': cached['geometry'],
         }
